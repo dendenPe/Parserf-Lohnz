@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schweizer Lohnabrechnung Parser - Lohnart & Total</title>
+    <style>
+        :root {
+            --primary-color: #0056b3;
+            --bg-color: #f4f4f9;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 { margin-top: 0; color: var(--primary-color); }
+        h2 { color: #444; margin-top: 30px; }
+        h3 { color: #555; margin-bottom: 10px; }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #004494;
+        }
+
+        .status-box {
+            padding: 15px;
+            background-color: #e9ecef;
+            border-left: 5px solid #ccc;
+            margin-bottom: 20px;
+        }
+
+        .status-box.success { border-color: #28a745; background-color: #d4edda; color: #155724; }
+        .status-box.error { border-color: #dc3545; background-color: #f8d7da; color: #721c24; }
+        .status-box.loading { border-color: #ffc107; background-color: #fff3cd; color: #856404; }
+        .status-box.info { border-color: #0056b3; background-color: #d6eaff; color: #004085; }
+
+        .table-container {
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th { background-color: #f1f1f1; }
+
+        #debugLog {
+            background: #333;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 12px;
+        }
+
+        .summary-total {
+            background-color: #e8f4ff;
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        
+        .positive-betrag {
+            color: #28a745;
+        }
+        
+        .negative-betrag {
+            color: #dc3545;
+        }
+        
+        .info-box {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #0056b3;
+        }
+        
+        .raw-text-view {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 11px;
+            margin: 10px 0;
+        }
+        
+        .found-row {
+            background-color: #e8f5e8 !important;
+        }
+        
+        .not-found-row {
+            background-color: #fff0f0 !important;
+            color: #999;
+        }
+        
+        .betrag-cell {
+            text-align: right !important;
+            font-family: monospace;
+            font-weight: 500;
+        }
+        
+        .position-cell {
+            font-weight: 500;
+        }
+        
+        .filename-cell {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .method-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            margin-left: 5px;
+        }
+        
+        .table-detection {
+            background-color: #e8f5e8;
+        }
+        
+        .keyword-detection {
+            background-color: #e6f3ff;
+        }
+        
+        .analysis-box {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        .table-preview {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre;
+            font-size: 11px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🇨🇭 Schweizer Lohnabrechnung Parser - Lohnart & Total Fokus</h1>
+        
+        <div class="info-box">
+            <p><strong>Optimiert für offene Tabellen:</strong> Der Parser sucht speziell nach Tabellen mit den Spalten "Lohnart" (erste Spalte) und "Total" (letzte Spalte).</p>
+            <p><strong>Erkennungsstrategie:</strong> 1. Tabellenerkennung, 2. Keyword-Betrag Paare, 3. Direkte Regex-Suche</p>
+        </div>
+        
+        <!-- Steuerungsbereich -->
+        <div class="controls">
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" accept=".pdf" multiple>
+            </div>
+            <button id="btnParse">PDFs parsen</button>
+            <button id="btnExport" disabled>CSV exportieren</button>
+            <button id="btnShowAnalysis" disabled>Tabellenanalyse</button>
+        </div>
+
+        <!-- Status und Feedback -->
+        <div id="status" class="status-box">Bereit zum Upload...</div>
+        
+        <!-- Tabellenanalyse -->
+        <div id="analysisContainer" style="display: none;">
+            <div class="analysis-box">
+                <h3>Tabellenanalyse</h3>
+                <div id="tablePreview" class="table-preview"></div>
+                <div id="analysisResults"></div>
+            </div>
+        </div>
+
+        <!-- Standardpositionen Tabelle -->
+        <div class="table-container">
+            <h3>Standardpositionen pro Datei</h3>
+            <table id="standardTable">
+                <thead>
+                    <tr>
+                        <th>Datei</th>
+                        <th>Monat/Jahr</th>
+                        <th>Bruttolohn</th>
+                        <th>AHV</th>
+                        <th>ALV</th>
+                        <th>BVG-Beitrag</th>
+                        <th>Quellensteuerabzug</th>
+                        <th>Nettolohn</th>
+                        <th>Auszahlung</th>
+                        <th>Erkennungsrate</th>
+                    </tr>
+                </thead>
+                <tbody id="standardTableBody">
+                    <!-- Standardpositionen werden hier eingefügt -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Detaillierte Positionen Tabelle -->
+        <div class="table-container">
+            <h3>Alle erkannten Positionen</h3>
+            <table id="positionsTable">
+                <thead>
+                    <tr>
+                        <th>Datei</th>
+                        <th>Position</th>
+                        <th>Betrag (CHF)</th>
+                        <th>Methode</th>
+                    </tr>
+                </thead>
+                <tbody id="positionsTableBody">
+                    <!-- Alle Positionen werden hier eingefügt -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Debug Bereich -->
+        <details>
+            <summary>Debug Log anzeigen</summary>
+            <pre id="debugLog"></pre>
+        </details>
+    </div>
+
+    <script type="module">
+        // ======================================================
+        // OPTIMIERTER PARSER FÜR OFFENE TABELLEN
+        // ======================================================
+        
+        // DEFINITION DER GESUCHTEN POSITIONEN
+        const POSITIONEN_CONFIG = {
+            // EINNAHMEN
+            'Monatslohn': {
+                keywords: ['Monatslohn', 'Lohn', 'Grundlohn', 'Monatsgehalt', 'Bruttolohn'],
+                category: 'Einnahmen'
+            },
+            'Familienzulage': {
+                keywords: ['Familienzulage', 'Kinderzulage', 'Familienzuschlag'],
+                category: 'Einnahmen'
+            },
+            'Pauschalspesen': {
+                keywords: ['Pauschalspesen', 'Spesenpauschale', 'Pauschal Spesen'],
+                category: 'Einnahmen'
+            },
+            'Aufrechnung Geschäftswagen': {
+                keywords: ['Aufrechnung Geschäftswagen', 'Geschäftswagen', 'Firmenwagen'],
+                category: 'Einnahmen'
+            },
+            
+            // BRUTTOLOHN
+            'Bruttolohn': {
+                keywords: ['Bruttolohn', 'Brutto', 'Total Brutto', 'Bruttobetrag'],
+                category: 'Total'
+            },
+            
+            // ABZÜGE
+            'AHV': {
+                keywords: ['AHV', 'AHV-Beitrag', 'AHV Beitrag'],
+                category: 'Abzüge'
+            },
+            'ALV': {
+                keywords: ['ALV', 'ALV-Beitrag', 'ALV Beitrag'],
+                category: 'Abzüge'
+            },
+            'Sozialfond-Beitrag': {
+                keywords: ['Sozialfond', 'Sozialfonds', 'Sozialfonds-Beitrag'],
+                category: 'Abzüge'
+            },
+            'BVG-Beitrag': {
+                keywords: ['BVG', 'BVG-Beitrag', 'BVG Beitrag', 'Pensionskasse'],
+                category: 'Abzüge'
+            },
+            'Quellensteuerabzug': {
+                keywords: ['Quellensteuerabzug', 'Quellensteuer', 'QST', 'Steuerabzug'],
+                category: 'Abzüge'
+            },
+            'Total Abzüge': {
+                keywords: ['Total Abzüge', 'Abzüge Total', 'Summe Abzüge'],
+                category: 'Total'
+            },
+            
+            // NETTOLOHN UND AUSZAHLUNG
+            'Nettolohn': {
+                keywords: ['Nettolohn', 'Netto', 'Auszahlungsbetrag'],
+                category: 'Total'
+            },
+            'Korrektur Aufrechnung Geschäftswagen': {
+                keywords: ['Korrektur Aufrechnung Geschäftswagen', 'Korrektur Geschäftswagen'],
+                category: 'Spezial'
+            },
+            'Auszahlung': {
+                keywords: ['Auszahlung', 'Überweisungsbetrag', 'Zahlbetrag'],
+                category: 'Total'
+            }
+        };
+
+        /**
+         * Lädt ein PDF und extrahiert Text mit Erhalt der Zeilenstruktur
+         */
+        async function loadAndExtractPdfText(file) {
+            try {
+                const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.mjs';
+                
+                const arrayBuffer = await file.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                const pdf = await loadingTask.promise;
+                
+                let fullText = "";
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    
+                    // Gruppiere Text nach Zeilen (basierend auf y-Position)
+                    const itemsByLine = {};
+                    
+                    textContent.items.forEach(item => {
+                        const y = Math.round(item.transform[5]); // y-Position
+                        if (!itemsByLine[y]) {
+                            itemsByLine[y] = [];
+                        }
+                        itemsByLine[y].push({
+                            text: item.str,
+                            x: item.transform[4] // x-Position für Spaltenerkennung
+                        });
+                    });
+                    
+                    // Sortiere Zeilen (höhere y = weiter oben)
+                    const sortedLines = Object.keys(itemsByLine)
+                        .map(y => parseInt(y))
+                        .sort((a, b) => b - a); // Von oben nach unten
+                    
+                    // Baue jede Zeile
+                    sortedLines.forEach(y => {
+                        const items = itemsByLine[y];
+                        // Sortiere innerhalb der Zeile nach x-Position (von links nach rechts)
+                        items.sort((a, b) => a.x - b.x);
+                        
+                        // Erkenne Spalten basierend auf x-Abständen
+                        let lineText = "";
+                        let lastX = -Infinity;
+                        
+                        items.forEach((item, index) => {
+                            // Wenn der x-Abstand groß ist (> 50), ist es wahrscheinlich eine neue Spalte
+                            if (item.x - lastX > 50 && index > 0) {
+                                lineText += " | ";
+                            } else if (index > 0) {
+                                lineText += " ";
+                            }
+                            
+                            lineText += item.text;
+                            lastX = item.x;
+                        });
+                        
+                        fullText += lineText + "\n";
+                    });
+                }
+
+                return fullText;
+            } catch (error) {
+                console.error("Fehler beim Laden des PDFs:", error);
+                throw new Error(`PDF konnte nicht geladen werden: ${error.message}`);
+            }
+        }
+
+        /**
+         * Konvertiert einen Schweizer Betrags-String zu einer Zahl
+         */
+        function parseSwissAmount(amountStr) {
+            if (!amountStr) return 0;
+            
+            // Entferne alles ausser Zahlen, Minuszeichen, Punkt und Komma
+            const cleanStr = amountStr
+                .replace(/[''´`\s]/g, '')  // Tausendertrennzeichen und Leerzeichen entfernen
+                .replace(',', '.');        // Komma zu Punkt konvertieren
+            
+            // Prüfe auf negatives Vorzeichen
+            const isNegative = cleanStr.startsWith('-');
+            const absStr = isNegative ? cleanStr.substring(1) : cleanStr;
+            
+            const amount = parseFloat(absStr);
+            if (isNaN(amount)) return 0;
+            
+            return isNegative ? -amount : amount;
+        }
+
+        /**
+         * Formatiert eine Zahl als Schweizer Betrag mit Apostroph für Tausender
+         */
+        function formatSwissAmount(amount) {
+            if (typeof amount !== 'number' || isNaN(amount)) return '0.00';
+            
+            const absAmount = Math.abs(amount);
+            const formatted = absAmount.toFixed(2)
+                .replace(/\B(?=(\d{3})+(?!\d))/g, "'");
+            
+            return (amount < 0 ? '-' : '') + formatted;
+        }
+
+        /**
+         * NEU: Erkennt Tabellen mit "Lohnart" und "Total" Spalten
+         */
+        function detectLohnartTable(text) {
+            const lines = text.split('\n');
+            let tableStart = -1;
+            let tableEnd = -1;
+            let hasLohnartHeader = false;
+            let hasTotalHeader = false;
+            
+            // Suche nach Tabellenbeginn (Zeile mit "Lohnart" und "Total")
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].toLowerCase();
+                
+                if (line.includes('lohnart') && line.includes('total')) {
+                    tableStart = i;
+                    hasLohnartHeader = true;
+                    hasTotalHeader = true;
+                    break;
+                } else if (line.includes('lohnart')) {
+                    // Prüfe nächste Zeile für "Total"
+                    if (i + 1 < lines.length && lines[i + 1].toLowerCase().includes('total')) {
+                        tableStart = i;
+                        hasLohnartHeader = true;
+                        hasTotalHeader = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (tableStart === -1) {
+                console.log("Keine Lohnart-Tabelle gefunden");
+                return { found: false, tableLines: [] };
+            }
+            
+            // Finde Tabellenende (leere Zeile oder andere Überschrift)
+            for (let i = tableStart + 1; i < lines.length; i++) {
+                if (lines[i].trim() === '' || 
+                    lines[i].toLowerCase().includes('total') ||
+                    lines[i].toLowerCase().includes('summe') ||
+                    lines[i].toLowerCase().includes('gesamt') ||
+                    (i - tableStart > 30)) { // Maximal 30 Zeilen Tabelle
+                    tableEnd = i;
+                    break;
+                }
+            }
+            
+            if (tableEnd === -1) {
+                tableEnd = Math.min(tableStart + 30, lines.length);
+            }
+            
+            const tableLines = lines.slice(tableStart, tableEnd);
+            console.log(`Lohnart-Tabelle gefunden: Zeilen ${tableStart}-${tableEnd}`);
+            
+            return {
+                found: true,
+                tableStart,
+                tableEnd,
+                hasLohnartHeader,
+                hasTotalHeader,
+                tableLines
+            };
+        }
+
+        /**
+         * Extrahiert Daten aus Lohnart-Tabelle
+         */
+        function parseLohnartTable(tableLines) {
+            const results = [];
+            
+            // Überspringen der Header-Zeile(n)
+            let startIndex = 0;
+            while (startIndex < tableLines.length && 
+                   (tableLines[startIndex].toLowerCase().includes('lohnart') || 
+                    tableLines[startIndex].toLowerCase().includes('total'))) {
+                startIndex++;
+            }
+            
+            // Durchsuche die Tabellenzeilen
+            for (let i = startIndex; i < tableLines.length; i++) {
+                const line = tableLines[i].trim();
+                if (!line) continue;
+                
+                // Versuche verschiedene Methoden, um Lohnart und Betrag zu extrahieren
+                
+                // Methode 1: Suche nach Betrag am Ende der Zeile
+                const amountMatch = line.match(/([-]?\d[''´`\s\d]*[.,]\d{2})\s*(?:CHF)?$/);
+                if (amountMatch) {
+                    const amount = parseSwissAmount(amountMatch[1]);
+                    
+                    if (Math.abs(amount) >= 0.01) {
+                        // Extrahiere den Lohnart-Namen (alles vor dem Betrag)
+                        const amountIndex = line.lastIndexOf(amountMatch[0]);
+                        const lohnartName = line.substring(0, amountIndex).trim();
+                        
+                        if (lohnartName && lohnartName.length > 2) {
+                            // Prüfe, ob es einer unserer gesuchten Positionen entspricht
+                            for (const [positionName, config] of Object.entries(POSITIONEN_CONFIG)) {
+                                for (const keyword of config.keywords) {
+                                    if (lohnartName.toLowerCase().includes(keyword.toLowerCase())) {
+                                        results.push({
+                                            name: positionName,
+                                            amount: amount,
+                                            formattedAmount: formatSwissAmount(amount),
+                                            category: config.category,
+                                            method: 'table',
+                                            rawLohnart: lohnartName,
+                                            rawLine: line
+                                        });
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Methode 2: Suche nach getrennten Teilen (wenn "|" vorhanden)
+                if (line.includes('|')) {
+                    const parts = line.split('|').map(p => p.trim());
+                    if (parts.length >= 2) {
+                        // Erster Teil ist Lohnart, letzter Teil ist Betrag
+                        const lohnartName = parts[0];
+                        const lastPart = parts[parts.length - 1];
+                        const amountMatch2 = lastPart.match(/([-]?\d[''´`\s\d]*[.,]\d{2})/);
+                        
+                        if (amountMatch2) {
+                            const amount = parseSwissAmount(amountMatch2[1]);
+                            
+                            if (Math.abs(amount) >= 0.01 && lohnartName.length > 2) {
+                                for (const [positionName, config] of Object.entries(POSITIONEN_CONFIG)) {
+                                    for (const keyword of config.keywords) {
+                                        if (lohnartName.toLowerCase().includes(keyword.toLowerCase())) {
+                                            results.push({
+                                                name: positionName,
+                                                amount: amount,
+                                                formattedAmount: formatSwissAmount(amount),
+                                                category: config.category,
+                                                method: 'table',
+                                                rawLohnart: lohnartName,
+                                                rawLine: line
+                                            });
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return results;
+        }
+
+        /**
+         * Alternative Methode: Suche nach Keyword-Betrag Paaren
+         */
+        function parseKeywordAmountPairs(text) {
+            const results = [];
+            const lines = text.split('\n');
+            
+            // Suchmuster für Beträge
+            const amountPattern = /([-]?\d[''´`\s\d]*[.,]\d{2})\s*(?:CHF)?/g;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                // Suche alle Beträge in dieser Zeile
+                const amountMatches = [...line.matchAll(amountPattern)];
+                
+                for (const match of amountMatches) {
+                    const amount = parseSwissAmount(match[0]);
+                    
+                    if (Math.abs(amount) >= 0.01) {
+                        // Suche im Text vor dem Betrag nach Keywords
+                        const textBefore = line.substring(0, match.index);
+                        
+                        // Prüfe alle Positionen
+                        for (const [positionName, config] of Object.entries(POSITIONEN_CONFIG)) {
+                            for (const keyword of config.keywords) {
+                                if (textBefore.toLowerCase().includes(keyword.toLowerCase())) {
+                                    // Prüfe auch vorherige Zeile
+                                    let found = false;
+                                    
+                                    // Aktuelle Zeile
+                                    if (textBefore.toLowerCase().includes(keyword.toLowerCase())) {
+                                        found = true;
+                                    }
+                                    
+                                    // Vorherige Zeile
+                                    if (i > 0 && !found) {
+                                        const prevLine = lines[i - 1].toLowerCase();
+                                        if (prevLine.includes(keyword.toLowerCase())) {
+                                            found = true;
+                                        }
+                                    }
+                                    
+                                    if (found) {
+                                        results.push({
+                                            name: positionName,
+                                            amount: amount,
+                                            formattedAmount: formatSwissAmount(amount),
+                                            category: config.category,
+                                            method: 'keyword',
+                                            keyword: keyword
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return results;
+        }
+
+        /**
+         * Direkte Regex-Suche für spezifische Positionen
+         */
+        function parseDirectRegex(text) {
+            const results = [];
+            
+            // Erstelle spezifische Muster für jede Position
+            for (const [positionName, config] of Object.entries(POSITIONEN_CONFIG)) {
+                for (const keyword of config.keywords) {
+                    // Suche nach Keyword, gefolgt von Betrag (max 100 Zeichen Abstand)
+                    const pattern = new RegExp(`${keyword}[\\s:]{0,10}([-\\d'’\\s\\d]*[.,]\\d{2})`, 'gi');
+                    const matches = [...text.matchAll(pattern)];
+                    
+                    for (const match of matches) {
+                        if (match[1]) {
+                            const amount = parseSwissAmount(match[1]);
+                            
+                            if (Math.abs(amount) >= 0.01) {
+                                // Plausibilitätsprüfung für bestimmte Positionen
+                                if ((positionName === 'Bruttolohn' || positionName === 'Nettolohn') && amount < 100) {
+                                    continue; // Zu klein für Lohn
+                                }
+                                
+                                results.push({
+                                    name: positionName,
+                                    amount: amount,
+                                    formattedAmount: formatSwissAmount(amount),
+                                    category: config.category,
+                                    method: 'regex',
+                                    keyword: keyword
+                                });
+                                break; // Nur erste Übereinstimmung pro Position
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return results;
+        }
+
+        /**
+         * Haupt-Parsing-Funktion mit mehreren Strategien
+         */
+        function parseSwissLohnabrechnung(text, fileName) {
+            console.log(`Starte Parsing von: ${fileName}`);
+            
+            // 1. Tabellenerkennung (primäre Methode)
+            const tableDetection = detectLohnartTable(text);
+            let tableResults = [];
+            
+            if (tableDetection.found) {
+                console.log(`Lohnart-Tabelle erkannt: ${tableDetection.tableLines.length} Zeilen`);
+                tableResults = parseLohnartTable(tableDetection.tableLines);
+                console.log(`Aus Tabelle extrahiert: ${tableResults.length} Positionen`);
+            }
+            
+            // 2. Keyword-Betrag Paare (sekundäre Methode)
+            const keywordResults = parseKeywordAmountPairs(text);
+            console.log(`Keyword-Paare gefunden: ${keywordResults.length}`);
+            
+            // 3. Direkte Regex-Suche (Fallback)
+            const regexResults = parseDirectRegex(text);
+            console.log(`Regex-Treffer: ${regexResults.length}`);
+            
+            // Kombiniere Ergebnisse mit Priorität: Tabelle > Keyword > Regex
+            const allResults = [...tableResults];
+            const addedPositions = new Set(tableResults.map(r => r.name));
+            
+            // Füge Keyword-Ergebnisse hinzu (wenn nicht bereits in Tabelle)
+            for (const result of keywordResults) {
+                if (!addedPositions.has(result.name)) {
+                    allResults.push(result);
+                    addedPositions.add(result.name);
+                }
+            }
+            
+            // Füge Regex-Ergebnisse hinzu (wenn nicht bereits vorhanden)
+            for (const result of regexResults) {
+                if (!addedPositions.has(result.name)) {
+                    allResults.push(result);
+                    addedPositions.add(result.name);
+                }
+            }
+            
+            // Monat/Jahr erkennen
+            const monthPatterns = [
+                /(?:Abrechnung|Periode|Monat|Lohn für)\s+([^,\n]{5,30})/i,
+                /Monat\s+([0-9]{2}\.[0-9]{4})/i,
+                /Monat\s+([0-9]{2}\/[0-9]{4})/i
+            ];
+            
+            let monat = 'Unbekannt';
+            for (const pattern of monthPatterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    monat = match[1] ? match[1].trim() : match[0].trim();
+                    break;
+                }
+            }
+            
+            // Berechne Erkennungsrate
+            const totalPositions = Object.keys(POSITIONEN_CONFIG).length;
+            const detectionRate = Math.round((allResults.length / totalPositions) * 100);
+            
+            return {
+                filename: fileName,
+                monat: monat,
+                positions: allResults,
+                tableDetection: tableDetection.found,
+                tableResultsCount: tableResults.length,
+                keywordResultsCount: keywordResults.length,
+                regexResultsCount: regexResults.length,
+                totalPositions: totalPositions,
+                detectionRate: detectionRate,
+                tableLines: tableDetection.found ? tableDetection.tableLines : [],
+                parsedAt: new Date().toLocaleString()
+            };
+        }
+
+        // ======================================================
+        // MAIN.JS - Haupt-Controller
+        // ======================================================
+        // DOM Elemente
+        const fileInput = document.getElementById('fileInput');
+        const btnParse = document.getElementById('btnParse');
+        const btnExport = document.getElementById('btnExport');
+        const btnShowAnalysis = document.getElementById('btnShowAnalysis');
+        const statusDiv = document.getElementById('status');
+        const debugLog = document.getElementById('debugLog');
+        const standardTableBody = document.getElementById('standardTableBody');
+        const positionsTableBody = document.getElementById('positionsTableBody');
+        const analysisContainer = document.getElementById('analysisContainer');
+        const tablePreview = document.getElementById('tablePreview');
+        const analysisResults = document.getElementById('analysisResults');
+
+        // Globaler Speicher
+        let parsedResults = [];
+        let currentParsedData = null;
+
+        // Helper für UI Updates
+        function updateStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status-box ${type}`;
+        }
+
+        function logDebug(msg) {
+            debugLog.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+        }
+
+        // ---------------------------------------------------------
+        // HAUPTLOGIK: PARSEN
+        // ---------------------------------------------------------
+        btnParse.addEventListener('click', async () => {
+            const files = fileInput.files;
+
+            if (files.length === 0) {
+                updateStatus("Bitte wähle zuerst mindestens eine PDF-Datei aus.", "error");
+                return;
+            }
+
+            // Reset
+            parsedResults = [];
+            standardTableBody.innerHTML = "";
+            positionsTableBody.innerHTML = "";
+            debugLog.textContent = "";
+            analysisContainer.style.display = 'none';
+            btnExport.disabled = true;
+            btnShowAnalysis.disabled = true;
+            updateStatus(`Verarbeite ${files.length} Dateien...`, "loading");
+
+            try {
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    logDebug(`Starte Parsing: ${file.name}`);
+                    
+                    // PDF Text extrahieren
+                    const rawText = await loadAndExtractPdfText(file);
+                    logDebug(`Text extrahiert (${rawText.length} Zeichen)`);
+
+                    // Text parsen
+                    const data = parseSwissLohnabrechnung(rawText, file.name);
+                    parsedResults.push(data);
+                    currentParsedData = data;
+
+                    // UI aktualisieren
+                    addStandardRow(data);
+                    addPositionRows(data);
+                    
+                    const statusMsg = `Verarbeitet: ${i + 1} von ${files.length} ` +
+                                     `(Tabelle: ${data.tableResultsCount}, ` +
+                                     `Keywords: ${data.keywordResultsCount}, ` +
+                                     `Regex: ${data.regexResultsCount})`;
+                    updateStatus(statusMsg, "loading");
+                }
+
+                const totalFiles = files.length;
+                const avgDetectionRate = parsedResults.length > 0 
+                    ? Math.round(parsedResults.reduce((sum, r) => sum + r.detectionRate, 0) / parsedResults.length)
+                    : 0;
+                    
+                updateStatus(
+                    `Fertig! ${totalFiles} Dokumente geparst. ` +
+                    `Durchschnittliche Erkennungsrate: ${avgDetectionRate}%`, 
+                    "success"
+                );
+                btnExport.disabled = false;
+                btnShowAnalysis.disabled = false;
+
+            } catch (error) {
+                console.error(error);
+                updateStatus(`Fehler aufgetreten: ${error.message}`, "error");
+                logDebug(`CRITICAL ERROR: ${error.message}`);
+            }
+        });
+
+        // ---------------------------------------------------------
+        // TABELLENANALYSE ANZEIGEN
+        // ---------------------------------------------------------
+        btnShowAnalysis.addEventListener('click', () => {
+            if (currentParsedData) {
+                // Zeige Tabellenvorschau
+                if (currentParsedData.tableLines.length > 0) {
+                    tablePreview.textContent = currentParsedData.tableLines.join('\n');
+                    
+                    // Analyseergebnisse
+                    let analysisHTML = `<h4>Tabellenanalyse für: ${currentParsedData.filename}</h4>`;
+                    analysisHTML += `<p>Tabellenerkennung: ${currentParsedData.tableDetection ? '✓' : '✗'}</p>`;
+                    analysisHTML += `<p>Tabellenzeilen: ${currentParsedData.tableLines.length}</p>`;
+                    analysisHTML += `<p>Aus Tabelle extrahierte Positionen: ${currentParsedData.tableResultsCount}</p>`;
+                    
+                    if (currentParsedData.tableResultsCount > 0) {
+                        analysisHTML += `<h5>Gefundene Positionen aus Tabelle:</h5><ul>`;
+                        currentParsedData.positions
+                            .filter(p => p.method === 'table')
+                            .forEach(p => {
+                                analysisHTML += `<li>${p.name}: ${p.formattedAmount} (aus: "${p.rawLohnart}")</li>`;
+                            });
+                        analysisHTML += `</ul>`;
+                    }
+                    
+                    analysisResults.innerHTML = analysisHTML;
+                } else {
+                    tablePreview.textContent = "Keine Tabelle erkannt oder keine Tabellenzeilen verfügbar.";
+                    analysisResults.innerHTML = `<p>Keine Lohnart-Tabelle erkannt. Der Parser verwendet alternative Methoden.</p>`;
+                }
+                
+                analysisContainer.style.display = 'block';
+                updateStatus("Tabellenanalyse angezeigt", "info");
+            }
+        });
+
+        // ---------------------------------------------------------
+        // CSV EXPORT
+        // ---------------------------------------------------------
+        btnExport.addEventListener('click', () => {
+            if (parsedResults.length > 0) {
+                const flatData = [];
+                
+                for (const result of parsedResults) {
+                    result.positions.forEach(position => {
+                        flatData.push({
+                            Datei: result.filename,
+                            Monat: result.monat,
+                            Position: position.name,
+                            Betrag: position.amount,
+                            'Betrag formatiert': position.formattedAmount,
+                            Methode: position.method,
+                            Kategorie: position.category
+                        });
+                    });
+                }
+                
+                // CSV erstellen
+                const headers = Object.keys(flatData[0]);
+                const csvRows = [];
+                csvRows.push(headers.join(','));
+                
+                flatData.forEach(row => {
+                    const values = headers.map(header => {
+                        const val = row[header];
+                        const escaped = ('' + val).replace(/"/g, '""');
+                        return `"${escaped}"`;
+                    });
+                    csvRows.push(values.join(','));
+                });
+                
+                const csvString = csvRows.join('\n');
+                const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', `lohnabrechnung_${new Date().toISOString().slice(0,10)}.csv`);
+                link.style.visibility = 'hidden';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                updateStatus("CSV-Datei wurde heruntergeladen.", "success");
+            }
+        });
+
+        // ---------------------------------------------------------
+        // UI HELPER
+        // ---------------------------------------------------------
+        function addStandardRow(data) {
+            const tr = document.createElement('tr');
+            
+            const getPosition = (name) => data.positions.find(p => p.name === name);
+            
+            const positions = [
+                'Bruttolohn', 'AHV', 'ALV', 'BVG-Beitrag', 
+                'Quellensteuerabzug', 'Nettolohn', 'Auszahlung'
+            ];
+            
+            let rowHTML = `
+                <td class="filename-cell">${data.filename}</td>
+                <td>${data.monat}</td>
+            `;
+            
+            positions.forEach(posName => {
+                const pos = getPosition(posName);
+                if (pos) {
+                    const methodClass = pos.method === 'table' ? 'found-row' : '';
+                    rowHTML += `<td class="${methodClass} betrag-cell">${pos.formattedAmount}</td>`;
+                } else {
+                    rowHTML += `<td class="not-found-row betrag-cell">nicht gefunden</td>`;
+                }
+            });
+            
+            // Erkennungsrate
+            const detectionClass = data.detectionRate >= 50 ? 'found-row' : 'not-found-row';
+            rowHTML += `<td class="${detectionClass}">${data.detectionRate}%</td>`;
+            
+            tr.innerHTML = rowHTML;
+            standardTableBody.appendChild(tr);
+        }
+        
+        function addPositionRows(data) {
+            data.positions.forEach(position => {
+                const tr = document.createElement('tr');
+                
+                const methodBadge = position.method === 'table' 
+                    ? '<span class="method-badge table-detection">Tabelle</span>'
+                    : position.method === 'keyword'
+                    ? '<span class="method-badge keyword-detection">Keyword</span>'
+                    : '<span class="method-badge">Regex</span>';
+                
+                const amountClass = position.amount >= 0 ? 'positive-betrag' : 'negative-betrag';
+                
+                tr.innerHTML = `
+                    <td class="filename-cell">${data.filename}</td>
+                    <td class="position-cell">
+                        ${position.name}
+                        ${methodBadge}
+                    </td>
+                    <td class="betrag-cell ${amountClass}">
+                        ${position.formattedAmount}
+                    </td>
+                    <td>${position.method}</td>
+                `;
+                
+                positionsTableBody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
